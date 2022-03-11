@@ -34,6 +34,7 @@ func fileExists(filePath string, db *sql.DB) (bool, error) {
 		return false, err
 	}
 	if rows.Next() {
+		rows.Close()
 		return true, nil
 	}
 	rows.Close()
