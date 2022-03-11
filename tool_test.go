@@ -289,3 +289,17 @@ func TestDeleteDirPrivilaged2(t *testing.T) {
 		true, "Free size should be around required.")
 	assert.Equal(t, DirSize(current()) == 3, true, "There should be 3 exceptions.")
 }
+
+func testLog() {
+	log.Println("aaa")
+}
+func TestLogWrite(t *testing.T) {
+	file, err := os.OpenFile("文件日志.txt",
+		os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0666)
+	if err != nil {
+		log.Println(err)
+	} else {
+		log.SetOutput(file)
+		testLog()
+	}
+}

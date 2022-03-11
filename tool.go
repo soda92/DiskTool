@@ -176,6 +176,7 @@ func DeleteOldestFiles(device string, reqFree int, db *sql.DB) (*sql.DB, error) 
 						stmt.Close()
 						break
 					} else {
+						log.Println(err)
 						stmt, err := db.Prepare("UPDATE filesinfo SET error=1 WHERE path=?")
 						if err != nil {
 							log.Println(err)
