@@ -36,6 +36,7 @@ func fileExists(filePath string, db *sql.DB) (bool, error) {
 	if rows.Next() {
 		return true, nil
 	}
+	rows.Close()
 	return false, nil
 }
 
@@ -52,10 +53,11 @@ func DeleteOldestFiles(device string, reqFree int, db *sql.DB) (*sql.DB, error) 
 			return nil, err
 		}
 		_, err = db.Exec(strings.ReplaceAll(
-			`CREATE TABLE +filesinfo+ (
-				+path+ VARCHAR(1000) PRIMARY KEY NOT NULL,
+			`CREATE TABLE IF NOT EXISTS +filesinfo+ (
+				+path+ VARCHAR(500) PRIMARY KEY NOT NULL,
 				+created+ DATE NOT NULL,
-				+error+ BOOLEAN NOT NULL CHECK (error IN (0, 1))
+				+folder+ varchar(500) NOT NULL,
+				+error+ BOOLEAN NOT NULL
 			);`, "+", "`"))
 		if err != nil {
 			log.Println(err)
@@ -94,7 +96,7 @@ func DeleteOldestFiles(device string, reqFree int, db *sql.DB) (*sql.DB, error) 
 							if exists {
 								continue
 							}
-							stmt, err := db.Prepare("INSERT INTO filesinfo(path,created,error) values(?,?,?)")
+							stmt, err := db.Prepare("INSERT INTO filesinfo(path,created,folder,error) values(?,?,?,?)")
 							if err != nil {
 								log.Println(err)
 								return db, err
@@ -104,18 +106,19 @@ func DeleteOldestFiles(device string, reqFree int, db *sql.DB) (*sql.DB, error) 
 								log.Println(err)
 								return db, err
 							}
-							_, err = stmt.Exec(filePath, modifiedDate.ModTime(), 0)
+							_, err = stmt.Exec(filePath, modifiedDate.ModTime(), dateFolderPath, 0)
 							if err != nil {
 								log.Println(err)
 								return db, err
 							}
+							stmt.Close()
 						}
 					}
 				}
 			}
 		}
 	}
-
+	possibleEmptyFolders := make(map[string]bool)
 	for {
 		free, err := disk_free(device)
 		if err != nil {
@@ -126,36 +129,41 @@ func DeleteOldestFiles(device string, reqFree int, db *sql.DB) (*sql.DB, error) 
 			break
 		} else {
 			for {
-				rows, err := db.Query("SELECT * from filesinfo WHERE error=0 ORDER BY created LIMIT 1")
+				rows, err := db.Query("SELECT * FROM filesinfo WHERE error=false ORDER BY created LIMIT 1")
 				if err != nil {
 					log.Println(err)
 					return db, err
 				}
 				var path string
 				var created time.Time
+				var folder string
+				var _err bool
 				if rows.Next() {
-					err = rows.Scan(&path, &created)
+					err = rows.Scan(&path, &created, &folder, &_err)
+					possibleEmptyFolders[folder] = true
 					if err != nil {
 						log.Println(err)
 						return db, err
 					}
+					rows.Close()
 					if strings.Contains(path, "priv") {
-						stmt, err := db.Prepare("UPDATE filesinfo SET error=1 WHERE path=?")
+						stmt, err := db.Prepare("UPDATE filesinfo SET error=? WHERE path=?")
 						if err != nil {
 							log.Println(err)
 							return db, err
 						}
-						_, err = stmt.Exec(path)
+						_, err = stmt.Exec(true, path)
 						if err != nil {
 							log.Println(err)
 							return db, err
 						}
+						stmt.Close()
 						continue
 					}
 
 					err = os.Remove(path)
 					if err == nil {
-						stmt, err := db.Prepare("DELETE * FROM filesinfo WHERE path=?")
+						stmt, err := db.Prepare("DELETE FROM filesinfo WHERE path=?")
 						if err != nil {
 							log.Println(err)
 							return db, err
@@ -165,6 +173,7 @@ func DeleteOldestFiles(device string, reqFree int, db *sql.DB) (*sql.DB, error) 
 							log.Println(err)
 							return db, err
 						}
+						stmt.Close()
 						break
 					} else {
 						stmt, err := db.Prepare("UPDATE filesinfo SET error=1 WHERE path=?")
@@ -177,13 +186,27 @@ func DeleteOldestFiles(device string, reqFree int, db *sql.DB) (*sql.DB, error) 
 							log.Println(err)
 							return db, err
 						}
+						stmt.Close()
 						continue
 					}
 				}
 			}
 		}
 	}
-
+	for folder := range possibleEmptyFolders {
+		files, err := ioutil.ReadDir(folder)
+		if err != nil {
+			log.Println(err)
+			return db, err
+		}
+		empty := true
+		for range files {
+			empty = false
+		}
+		if empty {
+			os.Remove(folder)
+		}
+	}
 	return db, nil
 }
 

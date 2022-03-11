@@ -47,15 +47,12 @@ func CreateTestTree(sizeEmpty int, folderSizes []int) error {
 			if err != nil {
 				return err
 			}
-			time.Sleep(1 * time.Second)
+			f.Close()
+			time.Sleep(10 * time.Millisecond)
 		}
 	}
-	sumSize := sizeEmpty
-	for i := 0; i < len(folderSizes); i++ {
-		sumSize += folderSizes[i]
-	}
 	free, _ := disk_free_raw(device)
-	sizeLeft := free - uint64(sumSize)*uint64(size_per_file)
+	sizeLeft := free - uint64(sizeEmpty)*uint64(size_per_file)
 	filePath2 := filepath.Join(topFolder, "left.file")
 	f, err := os.Create(filePath2)
 	if err != nil {
@@ -65,6 +62,7 @@ func CreateTestTree(sizeEmpty int, folderSizes []int) error {
 	if err != nil {
 		return err
 	}
+	f.Close()
 	return nil
 }
 
@@ -94,7 +92,8 @@ func create_test_tree_privilaged(sizeEmpty int, folderSizes []int, errorSizes []
 				if err != nil {
 					return err
 				}
-				time.Sleep(1 * time.Second)
+				f.Close()
+				time.Sleep(10 * time.Millisecond)
 			}
 		}
 		for j := 0; j < size; j++ {
@@ -108,15 +107,12 @@ func create_test_tree_privilaged(sizeEmpty int, folderSizes []int, errorSizes []
 			if err != nil {
 				return err
 			}
-			time.Sleep(1 * time.Second)
+			f.Close()
+			time.Sleep(10 * time.Millisecond)
 		}
 	}
-	sumSize := sizeEmpty
-	for i := 0; i < len(folderSizes); i++ {
-		sumSize += folderSizes[i]
-	}
 	free, _ := disk_free_raw(device)
-	sizeLeft := free - uint64(sumSize)*uint64(size_per_file)
+	sizeLeft := free - uint64(sizeEmpty)*uint64(size_per_file)
 	filePath2 := filepath.Join(topFolder, "left.file")
 	f, err := os.Create(filePath2)
 	if err != nil {
@@ -126,6 +122,7 @@ func create_test_tree_privilaged(sizeEmpty int, folderSizes []int, errorSizes []
 	if err != nil {
 		return err
 	}
+	f.Close()
 	return nil
 }
 
@@ -188,6 +185,9 @@ func clean(device string) error {
 		return err
 	}
 	for _, topFolder := range files {
+		if topFolder.Name() == "$RECYCLE.BIN" || topFolder.Name() == "System Volume Information" {
+			continue
+		}
 		topFolderPath := filepath.Join(device, topFolder.Name())
 		err = os.RemoveAll(topFolderPath)
 		if err != nil {
@@ -200,6 +200,7 @@ func clean(device string) error {
 
 func TestDeleteDir(t *testing.T) {
 	device := "E:/"
+	clean(device)
 	required_free := 20
 	sizes := []int{6}
 	err := CreateTestTree(15, sizes)
@@ -219,11 +220,11 @@ func TestDeleteDir(t *testing.T) {
 		true, "Free size should be around required.")
 	assert.Equal(t, DirNotExist(current()), false, "Oldest folder should not be deleted.")
 	assert.Equal(t, no_empty_dir(), true, "There should be no empty directories.")
-	clean(device)
 }
 
 func TestDeleteDir2(t *testing.T) {
 	device := "E:/"
+	clean(device)
 	required_free := 20
 	sizes := []int{3, 15}
 	err := CreateTestTree(15, sizes)
@@ -243,11 +244,11 @@ func TestDeleteDir2(t *testing.T) {
 		true, "Free size should be around required.")
 	assert.Equal(t, DirNotExist(current()), true, "Oldest folder should be deleted.")
 	assert.Equal(t, no_empty_dir(), true, "There should be no empty directories.")
-	clean(device)
 }
 
 func TestDeleteDirPrivilaged(t *testing.T) {
 	device := "E:/"
+	clean(device)
 	required_free := 20
 	sizes := []int{6, 15}
 	sizes_err := []int{3}
@@ -257,7 +258,7 @@ func TestDeleteDirPrivilaged(t *testing.T) {
 	}
 	var db *sql.DB = nil
 	_, err = DeleteOldestFiles(device, required_free, db)
-	assert.Equal(t, err != nil, true, "There should be errors.")
+	assert.Equal(t, err == nil, true, "There should be no errors.")
 	free, err := disk_free(device)
 	if err != nil {
 		t.Fatalf("%v", err)
@@ -265,11 +266,11 @@ func TestDeleteDirPrivilaged(t *testing.T) {
 	assert.Equal(t, uint64(required_free)-1 <= free && free <= uint64(required_free)+1,
 		true, "Free size should be around required.")
 	assert.Equal(t, DirSize(current()) == 3, true, "There should be 3 exceptions.")
-	clean(device)
 }
 
 func TestDeleteDirPrivilaged2(t *testing.T) {
 	device := "E:/"
+	clean(device)
 	required_free := 20
 	sizes := []int{6, 4, 15}
 	sizes_err := []int{3, 1}
@@ -279,7 +280,7 @@ func TestDeleteDirPrivilaged2(t *testing.T) {
 	}
 	var db *sql.DB = nil
 	_, err = DeleteOldestFiles(device, required_free, db)
-	assert.Equal(t, err != nil, true, "There should be errors.")
+	assert.Equal(t, err == nil, true, "There should be no errors.")
 	free, err := disk_free(device)
 	if err != nil {
 		t.Fatalf("%v", err)
@@ -287,5 +288,4 @@ func TestDeleteDirPrivilaged2(t *testing.T) {
 	assert.Equal(t, uint64(required_free)-1 <= free && free <= uint64(required_free)+1,
 		true, "Free size should be around required.")
 	assert.Equal(t, DirSize(current()) == 3, true, "There should be 3 exceptions.")
-	clean(device)
 }
