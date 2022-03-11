@@ -47,7 +47,7 @@ func DeleteOldestFiles(device string, reqFree int, db *sql.DB) (*sql.DB, error) 
 		return nil, err
 	}
 	if db == nil {
-		db, err = sql.Open("sqlite3", "file::memory:?cache=shared")
+		db, err = sql.Open("sqlite3", "file::memory:")
 		if err != nil {
 			log.Println(err)
 			return nil, err
